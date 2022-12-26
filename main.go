@@ -72,7 +72,7 @@ func createBucket(ctx context.Context) s3.Client {
 func createConfiguration(ctx context.Context) aws.Config {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	cfg.Region = "us-east-1"
-	awsv2.AWSV2Instrumentor(&cfg.APIOptions)
+	awsv2.AWSV2Instrumentor(&cfg.APIOptions) // Só isso aqui ja é suficiente para pegar o S3, podemos criar o subsegment para dar mais detalhes
 	if err != nil {
 		panic("Config not available")
 	}
