@@ -46,10 +46,7 @@ func HandleRequest(ctx context.Context, event MyEvent) {
 func SendToS3(ctx context.Context, payload string) {
 	bucket := createBucket(ctx)
 
-	_, root := xray.BeginSubsegment(ctx, "testebucket-hlvls")
-	defer root.Close(nil)
-
-	putObject := createPutObject(payload)
+	putObject := createPutObject(ctx, payload)
 	_, err := bucket.PutObject(ctx, &putObject)
 
 	if err != nil {
@@ -57,7 +54,10 @@ func SendToS3(ctx context.Context, payload string) {
 	}
 }
 
-func createPutObject(payload string) s3.PutObjectInput {
+func createPutObject(ctx context.Context, payload string) s3.PutObjectInput {
+	// Poderiamos usar esse subsegment para dar detalhes da duração do processamento
+	_, root := xray.BeginSubsegment(ctx, "processamento-dados")
+	defer root.Close(nil)
 	return s3.PutObjectInput{
 		Bucket: aws.String("testebucket-hlvls"),
 		Key:    aws.String(fmt.Sprintf("%d.json", time.Now().UnixMilli())),
@@ -72,7 +72,7 @@ func createBucket(ctx context.Context) s3.Client {
 func createConfiguration(ctx context.Context) aws.Config {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	cfg.Region = "us-east-1"
-	awsv2.AWSV2Instrumentor(&cfg.APIOptions) // Só isso aqui ja é suficiente para pegar o S3, podemos criar o subsegment para dar mais detalhes
+	awsv2.AWSV2Instrumentor(&cfg.APIOptions) // Só isso aqui ja é suficiente para pegar a chamada do s3
 	if err != nil {
 		panic("Config not available")
 	}
