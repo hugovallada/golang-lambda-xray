@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -23,6 +24,67 @@ func main() {
 type MyEvent struct {
 	Name string `json:"name"`
 	Age  int    `json:"age"`
+}
+
+type Chain struct {
+	request  *http.Request
+	response *http.Response
+	data     []byte
+	err      error
+}
+
+func StartRequest(ctx context.Context) *Chain {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://viacep.com.br/ws/14010090/json/", nil)
+	return &Chain{
+		request: req,
+		err:     err,
+	}
+}
+
+func (c *Chain) GetResponse(ctx context.Context) *Chain {
+	if c.err != nil {
+		return c
+	}
+	httpClient := xray.Client(http.DefaultClient)
+	c.response, c.err = httpClient.Do(c.request)
+	return c
+}
+
+func (c *Chain) ProcessResponse(ctx context.Context) *Chain {
+	if c.err != nil {
+		return c
+	}
+	defer c.response.Body.Close()
+	c.data, c.err = io.ReadAll(c.response.Body)
+	return c
+}
+
+func (c *Chain) CommitToS3(ctx context.Context) *Chain {
+	if c.err != nil {
+		return c
+	}
+	SendToS3(ctx, string(c.data))
+	return c
+}
+
+func (c *Chain) EndRequest() error {
+	if c.err != nil {
+		log.Println("Error")
+		return c.err
+	}
+	log.Println("Success")
+	return nil
+}
+
+func api(ctx context.Context) {
+	err := StartRequest(ctx).
+		GetResponse(ctx).
+		ProcessResponse(ctx).
+		CommitToS3(ctx).
+		EndRequest()
+	if err != nil {
+		panic(err)
+	}
 }
 
 func HandleRequest(ctx context.Context, event MyEvent) {
